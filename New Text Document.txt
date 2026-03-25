@@ -1,0 +1,77 @@
+protected void doGet(SlingHttpServletRequest req, SlingHttpServletResponse resp)
+        throws ServletException, IOException {
+
+    logger.info(" NEW CODE EXECUTED ");
+
+    String formName = req.getParameter("letterName");
+    logger.info("FormName received is: " + formName);
+
+    PDFOutputOptions options = new PDFOutputOptions();
+    options.setAcrobatVersion(AcrobatVersion.Acrobat_11);
+    options.setLocale("us");
+    options.setLinearizedPDF(true);
+    options.setTaggedPDF(true);
+
+    //  DAM template path
+    String templateStr= "/content/dam/bupaforms/" + formName + ".xdp";
+
+    //  XML file path
+    String inputFile = "C:/ContentRoot/SampleXML.xml";
+
+    InputStream xmlStream = null;
+    InputStream templateStream = null;
+    InputStream pdfStream = null;
+
+    try {
+
+        //  Load XML
+        xmlStream = new FileInputStream(inputFile);
+
+        //  Resolve template from DAM
+        ResourceResolver resolver = req.getResourceResolver();
+        Resource resource = resolver.getResource(templatePath);
+
+        if (resource == null) {
+            throw new RuntimeException("Template not found in DAM: " + templatePath);
+        }
+
+        templateStream = resource.adaptTo(InputStream.class);
+
+        if (templateStream == null) {
+            throw new RuntimeException("Unable to read template stream");
+        }
+
+        //  Generate PDF
+        doc = outputService.generatePDFOutput(
+                new Document(templateStream),
+                new Document(xmlStream),
+                options
+        );
+
+        //  Set response headers
+        resp.setContentType("application/pdf");
+        resp.setHeader("Content-Disposition", "attachment; filename=SamplePDF.pdf");
+
+        //  Stream PDF (IMPORTANT: binary safe)
+        pdfStream = doc.getInputStream();
+        ServletOutputStream out = resp.getOutputStream();
+
+        byte[] buffer = new byte[8192];
+        int bytesRead;
+
+        while ((bytesRead = pdfStream.read(buffer)) != -1) {
+            out.write(buffer, 0, bytesRead);
+        }
+
+        out.flush();
+        out.close();
+
+    } catch (Exception e) {
+        logger.error(" Error generating PDF", e);
+        resp.sendError(500, "PDF generation failed: " + e.getMessage());
+    } finally {
+        if (xmlStream != null) xmlStream.close();
+        if (templateStream != null) templateStream.close();
+        if (pdfStream != null) pdfStream.close();
+    }
+}
